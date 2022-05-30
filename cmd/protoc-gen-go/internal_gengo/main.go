@@ -96,7 +96,7 @@ func GenerateFile(gen *protogen.Plugin, file *protogen.File) *protogen.Generated
 		genEnum(g, f, enum)
 	}
 	for _, message := range f.allMessages {
-		genMessage(g, f, message)
+		genMessage(gen, g, f, message)
 	}
 	genExtensions(g, f)
 
@@ -314,7 +314,7 @@ func genEnum(g *protogen.GeneratedFile, f *fileInfo, e *enumInfo) {
 	}
 }
 
-func genMessage(g *protogen.GeneratedFile, f *fileInfo, m *messageInfo) {
+func genMessage(gen *protogen.Plugin, g *protogen.GeneratedFile, f *fileInfo, m *messageInfo) {
 	if m.Desc.IsMapEntry() {
 		return
 	}
@@ -325,7 +325,7 @@ func genMessage(g *protogen.GeneratedFile, f *fileInfo, m *messageInfo) {
 		m.Desc.Options().(*descriptorpb.MessageOptions).GetDeprecated())
 	g.P(leadingComments,
 		"type ", m.GoIdent, " struct {")
-	genMessageFields(g, f, m)
+	genMessageFields(gen, g, f, m)
 	g.P("}")
 	g.P()
 
@@ -335,11 +335,11 @@ func genMessage(g *protogen.GeneratedFile, f *fileInfo, m *messageInfo) {
 	genMessageOneofWrapperTypes(g, f, m)
 }
 
-func genMessageFields(g *protogen.GeneratedFile, f *fileInfo, m *messageInfo) {
+func genMessageFields(gen *protogen.Plugin, g *protogen.GeneratedFile, f *fileInfo, m *messageInfo) {
 	sf := f.allMessageFieldsByPtr[m]
 	genMessageInternalFields(g, f, m, sf)
 	for _, field := range m.Fields {
-		genMessageField(g, f, m, field, sf)
+		genMessageField(gen, g, f, m, field, sf)
 	}
 }
 
@@ -363,7 +363,7 @@ func genMessageInternalFields(g *protogen.GeneratedFile, f *fileInfo, m *message
 	}
 }
 
-func genMessageField(g *protogen.GeneratedFile, f *fileInfo, m *messageInfo, field *protogen.Field, sf *structFields) {
+func genMessageField(gen *protogen.Plugin, g *protogen.GeneratedFile, f *fileInfo, m *messageInfo, field *protogen.Field, sf *structFields) {
 	if oneof := field.Oneof; oneof != nil && !oneof.Desc.IsSynthetic() {
 		// It would be a bit simpler to iterate over the oneofs below,
 		// but generating the field here keeps the contents of the Go
@@ -401,7 +401,7 @@ func genMessageField(g *protogen.GeneratedFile, f *fileInfo, m *messageInfo, fie
 	}
 	tags := structTags{
 		{"protobuf", fieldProtobufTagValue(field)},
-		{"json", fieldJSONTagValue(field)},
+		{"json", fieldJSONTagValue(gen, field)},
 	}
 	if field.Desc.IsMap() {
 		key := field.Message.Fields[0]
@@ -713,8 +713,20 @@ func fieldDefaultValue(g *protogen.GeneratedFile, f *fileInfo, m *messageInfo, f
 	}
 }
 
-func fieldJSONTagValue(field *protogen.Field) string {
-	return string(field.Desc.Name()) + ",omitempty"
+func fieldJSONTagValue(gen *protogen.Plugin, field *protogen.Field) string {
+	var v string
+	if gen.JsonTag.Identical {
+		if jsonName := field.Desc.JSONName(); jsonName != "" && jsonName != string(field.Desc.Name()) && !field.Desc.IsExtension() {
+			v = jsonName
+		}
+	}
+	if v == "" {
+		v = string(field.Desc.Name())
+	}
+	if !gen.JsonTag.EmitEmpty {
+		v += ",omitempty"
+	}
+	return v
 }
 
 func genExtensions(g *protogen.GeneratedFile, f *fileInfo) {

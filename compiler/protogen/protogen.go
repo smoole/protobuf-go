@@ -91,6 +91,11 @@ func run(opts Options, f func(*Plugin) error) error {
 	return nil
 }
 
+type JsonTag struct {
+	Identical bool
+	EmitEmpty bool
+}
+
 // A Plugin is a protoc plugin invocation.
 type Plugin struct {
 	// Request is the CodeGeneratorRequest provided by protoc.
@@ -116,6 +121,7 @@ type Plugin struct {
 	genFiles       []*GeneratedFile
 	opts           Options
 	err            error
+	JsonTag        JsonTag
 }
 
 type Options struct {
@@ -172,6 +178,17 @@ func (opts Options) New(req *pluginpb.CodeGeneratorRequest) (*Plugin, error) {
 		switch param {
 		case "":
 			// Ignore.
+		case "json_tag": // identical&emit_empty
+			for _, t := range strings.Split(value, "&") {
+				switch strings.TrimSpace(t) {
+				case "identical":
+					gen.JsonTag.Identical = true
+				case "emit_empty":
+					gen.JsonTag.EmitEmpty = true
+				default:
+					return nil, fmt.Errorf(`unknown json_tag %q: want "identical" or "emit_empty"`, value)
+				}
+			}
 		case "module":
 			gen.module = value
 		case "paths":
